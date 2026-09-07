@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Watt — Smart Power AI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #070b12;
+      --panel: rgba(20, 30, 45, .82);
+      --panel-2: rgba(14, 23, 38, .88);
+      --line: rgba(148,163,184,.14);
+      --muted: #94a3b8;
+      --lime: #a3e635;
+      --cyan: #38bdf8;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: #e5e7eb;
+      background:
+        radial-gradient(circle at 8% 0%, rgba(132,204,22,.11), transparent 30%),
+        radial-gradient(circle at 95% 85%, rgba(56,189,248,.10), transparent 30%),
+        linear-gradient(135deg,#060a11 0%,#0b1320 48%,#060a11 100%);
+      background-attachment: fixed;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .glass {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      box-shadow: 0 18px 55px rgba(0,0,0,.24);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+    }
+    .glass:hover { border-color: rgba(148,163,184,.22); }
+    .metric { position: relative; overflow: hidden; }
+    .metric::after {
+      content:""; position:absolute; inset:auto -35px -55px auto; width:120px; height:120px;
+      border-radius:999px; background:rgba(163,230,53,.07); filter:blur(5px);
+    }
+    .status-dot { width:8px; height:8px; border-radius:50%; display:inline-block; }
+    .pulse { animation:pulse 1.7s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+    .skeleton { background:linear-gradient(90deg,rgba(255,255,255,.05),rgba(255,255,255,.11),rgba(255,255,255,.05)); background-size:200% 100%; animation:shimmer 1.2s infinite; }
+    @keyframes shimmer { to { background-position:-200% 0; } }
+    ::-webkit-scrollbar { width:8px; }
+    ::-webkit-scrollbar-track { background:#070b12; }
+    ::-webkit-scrollbar-thumb { background:#243247; border-radius:99px; }
+    canvas { max-width:100%; }
+  </style>
+</head>
+<body class="min-h-screen">
+  <!-- LOGIN -->
+  <section id="login-screen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-xl">
+    <div class="glass w-full max-w-md rounded-3xl p-7 md:p-9">
+      <div class="text-center mb-7">
+        <img src="assets/smart-watt.svg" alt="Smart Watt" class="h-16 w-auto mx-auto object-contain" onerror="this.style.display='none'; document.getElementById('logo-fallback-login').classList.remove('hidden')">
+        <div id="logo-fallback-login" class="hidden mx-auto mb-3 w-14 h-14 rounded-2xl bg-lime-400/10 border border-lime-400/30 text-lime-300 grid place-items-center text-2xl"><i class="fa-solid fa-bolt"></i></div>
+        <h1 class="text-xl font-bold mt-4">Smart Power AI</h1>
+        <p class="text-xs text-slate-400 mt-1">Energy Monitoring & Decision Engine</p>
+      </div>
+      <form id="login-form" class="space-y-4">
+        <div>
+          <label class="text-xs text-slate-300">Username</label>
+          <input id="username" class="mt-1 w-full rounded-xl bg-slate-950/70 border border-slate-700 px-4 py-3 text-sm outline-none focus:border-lime-400" autocomplete="username" required>
+        </div>
+        <div>
+          <label class="text-xs text-slate-300">Password</label>
+          <input id="password" type="password" class="mt-1 w-full rounded-xl bg-slate-950/70 border border-slate-700 px-4 py-3 text-sm outline-none focus:border-lime-400" autocomplete="current-password" required>
+        </div>
+        <div id="login-error" class="hidden text-xs text-red-300 bg-red-500/10 border border-red-500/20 rounded-xl p-3">Username atau password salah.</div>
+        <button class="w-full rounded-xl bg-gradient-to-r from-lime-500 to-emerald-500 py-3 font-bold text-sm hover:brightness-110 transition">
+          <i class="fa-solid fa-right-to-bracket mr-2"></i>Masuk Dashboard
+        </button>
+      </form>
+      <p class="text-[10px] text-slate-500 text-center mt-5">Gunakan kredensial yang dikonfigurasi untuk dashboard.</p>
+    </div>
+  </section>
+
+  <!-- APP -->
+  <main id="app" class="hidden max-w-[1500px] mx-auto p-4 md:p-6 lg:p-8 space-y-5">
+    <header class="glass rounded-3xl p-4 md:p-5 flex flex-col xl:flex-row gap-4 xl:items-center xl:justify-between">
+      <div class="flex items-center gap-4 min-w-0">
+        <img src="assets/smart-watt.svg" alt="Smart Watt" class="h-12 md:h-14 w-auto max-w-[190px] object-contain" onerror="this.style.display='none'; document.getElementById('logo-fallback-head').classList.remove('hidden')">
+        <div id="logo-fallback-head" class="hidden w-12 h-12 rounded-2xl bg-lime-400/10 border border-lime-400/30 text-lime-300 place-items-center text-xl"><i class="fa-solid fa-bolt"></i></div>
+        <div class="hidden md:block h-10 w-px bg-slate-700"></div>
+        <div class="min-w-0">
+          <h1 class="font-bold text-lg md:text-xl truncate">Smart Power AI Dashboard</h1>
+          <p class="text-xs text-slate-400 mt-1">Monitoring energi, saldo kWh, kontrol relay & analisis beban</p>
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <div class="glass rounded-2xl px-4 py-2 text-center min-w-[155px]">
+          <div id="clock" class="font-mono font-bold text-lime-300 tracking-wider">00:00:00 WIB</div>
+          <div id="date" class="text-[11px] text-slate-400">-</div>
+        </div>
+        <div id="device-badge" class="rounded-full px-3 py-2 text-xs font-semibold bg-slate-800 text-slate-400 border border-slate-700">
+          <span class="status-dot bg-slate-500 mr-1.5"></span> Checking...
+        </div>
+        <button id="logout-btn" class="rounded-full px-3 py-2 text-xs font-semibold bg-red-500/90 hover:bg-red-500 transition"><i class="fa-solid fa-right-from-bracket mr-1"></i>Logout</button>
+      </div>
+    </header>
+
+    <!-- METRICS -->
+    <section class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+      <div class="glass metric rounded-2xl p-4"><p class="text-xs text-slate-400">Daya Saat Ini</p><p id="m-power" class="text-2xl font-bold text-amber-300 mt-1">0.0 W</p><p id="m-load" class="text-[10px] text-slate-500 mt-1">0% dari batas</p></div>
+      <div class="glass metric rounded-2xl p-4"><p class="text-xs text-slate-400">kWh Hari Ini</p><p id="m-kwh" class="text-2xl font-bold text-orange-300 mt-1">0.0000</p><p class="text-[10px] text-slate-500 mt-1">Energi terakumulasi</p></div>
+      <div class="glass metric rounded-2xl p-4"><p class="text-xs text-slate-400">Puncak Hari Ini</p><p id="m-peak" class="text-2xl font-bold text-red-300 mt-1">0.0 W</p><p id="m-peak-time" class="text-[10px] text-slate-500 mt-1">-</p></div>
+      <div class="glass metric rounded-2xl p-4"><p class="text-xs text-slate-400">Sisa Saldo</p><p id="m-balance" class="text-2xl font-bold text-lime-300 mt-1">0.0000</p><p class="text-[10px] text-slate-500 mt-1">kWh</p></div>
+      <div class="glass metric rounded-2xl p-4"><p class="text-xs text-slate-400">Tegangan / Arus</p><p id="m-vi" class="text-xl font-bold text-sky-300 mt-1">0 V / 0 A</p><p id="m-frequency" class="text-[10px] text-slate-500 mt-1">0.0 Hz • PZEM</p></div>
+      <div class="glass metric rounded-2xl p-4"><p class="text-xs text-slate-400">Biaya Bulan Ini</p><p id="m-cost" class="text-xl font-bold text-violet-300 mt-1">Rp 0</p><p id="m-month-kwh" class="text-[10px] text-slate-500 mt-1">0.0000 kWh</p></div>
+    </section>
+
+    <!-- AI / HEALTH -->
+    <section class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div class="glass rounded-3xl p-5 lg:col-span-2">
+        <div class="flex items-center justify-between gap-3">
+          <div><p class="text-xs text-slate-400 flex items-center gap-2"><i class="fa-solid fa-brain text-violet-300"></i>Decision Engine</p><h2 id="ai-title" class="text-2xl font-bold text-emerald-300 mt-1">MENUNGGU DATA</h2></div>
+          <span id="ai-level" class="text-[10px] font-bold px-3 py-1.5 rounded-full bg-slate-800 border border-slate-700">-</span>
+        </div>
+        <p id="ai-desc" class="text-sm text-slate-300 mt-4 max-w-3xl">Menganalisis kondisi penggunaan listrik.</p>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5">
+          <div class="rounded-2xl bg-slate-950/50 p-3"><p class="text-[10px] text-slate-500">Beban</p><p id="ai-load" class="font-bold mt-1">0%</p></div>
+          <div class="rounded-2xl bg-slate-950/50 p-3"><p class="text-[10px] text-slate-500">Rata-rata</p><p id="ai-avg" class="font-bold mt-1">0 W</p></div>
+          <div class="rounded-2xl bg-slate-950/50 p-3"><p class="text-[10px] text-slate-500">Status</p><p id="ai-status" class="font-bold mt-1">-</p></div>
+          <div class="rounded-2xl bg-slate-950/50 p-3"><p class="text-[10px] text-slate-500">Update</p><p id="ai-update" class="font-bold mt-1">-</p></div>
+        </div>
+      </div>
+      <div class="glass rounded-3xl p-5">
+        <p class="text-xs text-slate-400 flex items-center gap-2"><i class="fa-solid fa-server text-sky-300"></i>System Health</p>
+        <div class="mt-4 space-y-3 text-sm">
+          <div class="flex justify-between"><span class="text-slate-400">ESP8266 / Data</span><span id="health-device">Checking</span></div>
+          <div class="flex justify-between"><span class="text-slate-400">Google Apps Script</span><span id="health-gas" class="text-slate-400">Checking</span></div>
+          <div class="flex justify-between"><span class="text-slate-400">PZEM</span><span id="health-pzem">-</span></div>
+          <div class="flex justify-between"><span class="text-slate-400">Relay</span><span id="health-relay">-</span></div>
+          <div class="flex justify-between"><span class="text-slate-400">Last data</span><span id="health-age">-</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PREDICTION + CONTROLS -->
+    <section class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div class="glass rounded-3xl p-5">
+        <p class="text-xs text-slate-400"><i class="fa-solid fa-hourglass-half text-amber-300 mr-1"></i> Estimasi Saldo Habis</p>
+        <h2 id="prediction" class="text-xl font-bold text-amber-300 mt-2">Menghitung...</h2>
+        <p id="prediction-detail" class="text-xs text-slate-400 mt-2">Menggunakan rata-rata beban terbaru.</p>
+      </div>
+      <div class="glass rounded-3xl p-5">
+        <p class="text-xs text-slate-400"><i class="fa-solid fa-power-off text-red-300 mr-1"></i> Relay Utama</p>
+        <div class="flex items-center justify-between gap-3 mt-3">
+          <div><p id="relay-state" class="font-bold">SYNCING...</p><p class="text-[11px] text-slate-500">Kontrol Blynk V5</p></div>
+          <button id="relay-btn" class="rounded-xl px-5 py-3 font-bold text-sm bg-slate-700">Syncing...</button>
+        </div>
+      </div>
+      <div class="glass rounded-3xl p-5">
+        <p class="text-xs text-slate-400"><i class="fa-solid fa-wallet text-lime-300 mr-1"></i> Kelola Saldo</p>
+        <div class="flex gap-2 mt-3">
+          <input id="topup-input" type="number" min="1" step="1000" placeholder="Nominal Rp" class="min-w-0 flex-1 rounded-xl bg-slate-950/70 border border-slate-700 px-3 py-2.5 text-sm outline-none focus:border-lime-400">
+          <button id="topup-btn" class="rounded-xl px-4 bg-lime-500 text-slate-950 font-bold text-sm hover:bg-lime-400">Beli</button>
+        </div>
+        <button id="reset-btn" class="w-full mt-2 rounded-xl px-4 py-2.5 bg-red-500/80 hover:bg-red-500 font-semibold text-xs"><i class="fa-solid fa-rotate-left mr-1"></i>Reset Saldo</button>
+      </div>
+    </section>
+
+    <!-- REALTIME CHART -->
+    <section class="glass rounded-3xl p-5">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
+        <div><h2 class="font-semibold flex items-center gap-2"><i class="fa-solid fa-chart-line text-sky-300"></i> Konsumsi Daya Real-Time</h2><p class="text-xs text-slate-500 mt-1">60 titik data terbaru • interval perangkat ±5 detik</p></div>
+        <div class="text-xs px-3 py-1.5 rounded-xl bg-slate-950/60 border border-slate-700">Batas sistem: <strong id="limit-label">1100 W</strong></div>
+      </div>
+      <div class="h-72 md:h-96"><canvas id="power-chart"></canvas></div>
+    </section>
+
+    <!-- DAILY -->
+    <section class="glass rounded-3xl p-5">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
+        <div><h2 class="font-semibold flex items-center gap-2"><i class="fa-solid fa-chart-column text-lime-300"></i> Rekap Pemakaian Bulan Ini</h2><p id="summary-label" class="text-xs text-slate-500 mt-1">Energi harian dan estimasi biaya</p></div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs rounded-xl px-3 py-2 bg-slate-950/60 border border-slate-700">Total <strong id="month-total">0 kWh</strong></span>
+          <span class="text-xs rounded-xl px-3 py-2 bg-slate-950/60 border border-slate-700">Biaya <strong id="month-cost">Rp 0</strong></span>
+          <button id="export-btn" class="rounded-xl px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-xs font-bold"><i class="fa-solid fa-file-csv mr-1"></i>CSV</button>
+        </div>
+      </div>
+      <div class="h-72"><canvas id="daily-chart"></canvas></div>
+    </section>
+
+    <footer class="text-center text-[10px] text-slate-600 py-2">
+      Smart Watt • Smart Power AI • Data source: ESP8266 → Google Apps Script → Dashboard
+    </footer>
+  </main>
+
+<script>
+const CONFIG = {
+  GAS_URL: "https://script.google.com/macros/s/AKfycbxRXJNGGv0m4Y8brmgd8SOKEpaey4LaNNNmQlSFVeBcKEq4tORg2wh8e8E6eoJbQpyX/exec",
+  POWER_LIMIT_W: 1100,
+  // Fallback tampilan sebelum respons GAS masuk. Sumber tarif utama = GAS CFG.
+  TARIFF_RP_PER_KWH: 1444.7,
+  DEVICE_TIMEOUT_MS: 15000,
+  POLL_MS: 5000,
+  USERNAME: "BPVPSIDOARJO",
+  PASSWORD: "bpvp2026"
+};
+
+let powerChart = null;
+let dailyChart = null;
+let latestDashboard = null;
+let busy = false;
+let currentTariff = CONFIG.TARIFF_RP_PER_KWH;
+
+const $ = id => document.getElementById(id);
+const fmtRp = n => "Rp " + Math.round(Number(n)||0).toLocaleString("id-ID");
+const fmtKwh = n => (Number(n)||0).toFixed(4);
+const fmtW = n => (Number(n)||0).toFixed(1);
+
+function setLogin(show) {
+  $("login-screen").classList.toggle("hidden", !show);
+  $("app").classList.toggle("hidden", show);
+}
+function checkSession() { setLogin(sessionStorage.getItem("smartWattAuth") !== "1"); }
+$("login-form").addEventListener("submit", e => {
+  e.preventDefault();
+  if ($("username").value.trim() === CONFIG.USERNAME && $("password").value === CONFIG.PASSWORD) {
+    sessionStorage.setItem("smartWattAuth","1"); $("login-error").classList.add("hidden"); setLogin(false); boot();
+  } else $("login-error").classList.remove("hidden");
+});
+$("logout-btn").onclick = () => { sessionStorage.removeItem("smartWattAuth"); stopPolling(); setLogin(true); };
+$("limit-label").textContent = `${CONFIG.POWER_LIMIT_W} W`;
+
+function clockTick() {
+  const now = new Date();
+  $("clock").textContent = now.toLocaleTimeString("id-ID",{hour12:false}) + " WIB";
+  $("date").textContent = now.toLocaleDateString("id-ID",{weekday:"long",day:"2-digit",month:"long",year:"numeric"});
+}
+setInterval(clockTick,1000); clockTick();
+
+function initCharts() {
+  const common = {
+    responsive:true, maintainAspectRatio:false,
+    interaction:{mode:"index",intersect:false},
+    plugins:{
+      legend:{labels:{color:"#cbd5e1",boxWidth:12}},
+      tooltip:{
+        backgroundColor:"#0b1320",borderColor:"rgba(148,163,184,.2)",borderWidth:1,
+        callbacks:{
+          label:c => `${c.dataset.label}: ${fmtW(c.raw)} W`,
+          afterBody:items => {
+            const item=items?.[0];
+            const row=powerChart?._smartLogs?.[item?.dataIndex];
+            if(!row) return [];
+            return [
+              `Tegangan: ${Number(row.voltage||0).toFixed(0)} V`,
+              `Arus: ${Number(row.current||0).toFixed(2)} A`,
+              `Frekuensi: ${Number(row.frequency||0).toFixed(1)} Hz`
+            ];
+          }
+        }
+      }
+    },
+    scales:{
+      x:{ticks:{color:"#64748b",maxRotation:0},grid:{display:false}},
+      y:{beginAtZero:true,ticks:{color:"#94a3b8"},grid:{color:"rgba(148,163,184,.08)"}}
+    }
+  };
+  powerChart = new Chart($("power-chart"), {
+    type:"line",
+    data:{labels:[],datasets:[
+      {label:"Daya",data:[],borderColor:"#a3e635",backgroundColor:"rgba(163,230,53,.10)",fill:true,tension:.3,pointRadius:2,pointHoverRadius:5,borderWidth:2},
+      {label:`Batas ${CONFIG.POWER_LIMIT_W} W`,data:[],borderColor:"#ef4444",borderDash:[6,6],pointRadius:0,borderWidth:1.5}
+    ]},
+    options:{...common,scales:{...common.scales,y:{...common.scales.y,title:{display:true,text:"Watt",color:"#64748b"}}}}
+  });
+  dailyChart = new Chart($("daily-chart"), {
+    type:"bar",
+    data:{labels:[],datasets:[{label:"kWh",data:[],backgroundColor:"rgba(163,230,53,.62)",borderColor:"#a3e635",borderWidth:1,borderRadius:7}]},
+    options:{...common,plugins:{...common.plugins,legend:{display:false},tooltip:{callbacks:{label:c=>`${fmtKwh(c.raw)} kWh • ${fmtRp(c.raw*currentTariff)}`}}},scales:{...common.scales,y:{...common.scales.y,title:{display:true,text:"kWh",color:"#64748b"}}}}
+  });
+}
+
+function setDeviceStatus(online, ageMs) {
+  const el=$("device-badge"), health=$("health-device"), age=$("health-age");
+  if (online) {
+    el.className="rounded-full px-3 py-2 text-xs font-semibold bg-emerald-500/10 text-emerald-300 border border-emerald-500/20";
+    el.innerHTML='<span class="status-dot bg-emerald-400 pulse mr-1.5"></span> Device Online';
+    health.innerHTML='<span class="text-emerald-300">ONLINE</span>';
+  } else {
+    el.className="rounded-full px-3 py-2 text-xs font-semibold bg-red-500/10 text-red-300 border border-red-500/20";
+    el.innerHTML='<span class="status-dot bg-red-400 mr-1.5"></span> Device Offline';
+    health.innerHTML='<span class="text-red-300">OFFLINE</span>';
+  }
+  age.textContent = ageMs == null ? "-" : `${Math.max(0,Math.round(ageMs/1000))} dtk`;
+}
+
+function applyAI(d) {
+  const ai=d.ai||{};
+  const p=Number(d.latest?.power)||0;
+  const avg=Number(d.avgPowerRecent)||0;
+  const load=Math.min(100,p/CONFIG.POWER_LIMIT_W*100);
+  const level=String(ai.level||"NO_DATA").toUpperCase();
+  const titleMap={NORMAL:"PENGGUNAAN NORMAL",WASPADA:"BEBAN TINGGI",BAHAYA:"PERINGATAN OVERLOAD",STANDBY:"STANDBY TINGGI",NO_DATA:"MENUNGGU DATA"};
+  const classMap={NORMAL:"text-emerald-300",WASPADA:"text-amber-300",BAHAYA:"text-red-300",STANDBY:"text-yellow-300",NO_DATA:"text-slate-300"};
+  const badgeMap={NORMAL:"bg-emerald-500/10 text-emerald-300 border border-emerald-500/20",WASPADA:"bg-amber-500/10 text-amber-300 border border-amber-500/20",BAHAYA:"bg-red-500/10 text-red-300 border border-red-500/20",STANDBY:"bg-yellow-500/10 text-yellow-300 border border-yellow-500/20",NO_DATA:"bg-slate-800 text-slate-400 border border-slate-700"};
+  $("ai-load").textContent=Math.round(load)+"%";
+  $("ai-avg").textContent=fmtW(avg)+" W";
+  $("ai-update").textContent=d.latest?.waktu || "-";
+  $("ai-title").textContent=titleMap[level]||level;
+  $("ai-title").className=`text-2xl font-bold mt-1 ${classMap[level]||"text-slate-300"}`;
+  $("ai-level").textContent=level;
+  $("ai-level").className=`text-[10px] font-bold px-3 py-1.5 rounded-full ${badgeMap[level]||badgeMap.NO_DATA}`;
+  $("ai-desc").textContent=ai.message||"Belum ada keputusan dari Decision Engine.";
+  $("ai-status").textContent=level;
+}
+
+function applyPrediction(d) {
+  const saldo=Number(d.latest.saldoAktual)||0, avg=Number(d.avgPowerRecent)||0;
+  if (saldo<=0) { $("prediction").textContent="Saldo Habis"; $("prediction").className="text-xl font-bold text-red-300 mt-2"; $("prediction-detail").textContent="Isi ulang saldo untuk melanjutkan pemakaian."; return; }
+  if (avg<=0) { $("prediction").textContent="Beban 0 Watt"; $("prediction").className="text-xl font-bold text-slate-300 mt-2"; $("prediction-detail").textContent="Belum ada konsumsi terukur pada data terbaru."; return; }
+  const hours=saldo*1000/avg, days=Math.floor(hours/24), h=Math.floor(hours%24), m=Math.floor(hours*60%60);
+  $("prediction").textContent=`${days?days+" Hari ":""}${h? h+" Jam ":""}${m} Menit`;
+  $("prediction").className="text-xl font-bold text-amber-300 mt-2";
+  $("prediction-detail").textContent=`Estimasi berdasarkan rata-rata ${fmtW(avg)} W pada data terbaru.`;
+}
+
+function applyRelay(state) {
+  const on=Number(state)===1;
+  $("relay-state").textContent=on?"ON":"OFF";
+  $("relay-state").className=`font-bold ${on?"text-emerald-300":"text-red-300"}`;
+  $("relay-btn").textContent=on?"Matikan":"Nyalakan";
+  $("relay-btn").className=`rounded-xl px-5 py-3 font-bold text-sm ${on?"bg-red-500 hover:bg-red-400":"bg-emerald-500 hover:bg-emerald-400"} text-white`;
+  $("health-relay").innerHTML=on?'<span class="text-emerald-300">ON</span>':'<span class="text-red-300">OFF</span>';
+}
+
+function render(d) {
+  latestDashboard=d;
+  currentTariff=Number(d.tariffRpPerKwh)||CONFIG.TARIFF_RP_PER_KWH;
+  const latest=d.latest||{};
+  const online=Boolean(d.deviceOnline);
+  setDeviceStatus(online,d.lastDataAgeMs);
+  $("health-gas").innerHTML='<span class="text-emerald-300">CONNECTED</span>';
+  $("m-power").textContent=online?fmtW(latest.power)+" W":"0.0 W";
+  $("m-kwh").textContent=fmtKwh(d.kwhHariIni);
+  $("m-peak").textContent=fmtW(d.peakPowerToday)+" W";
+  $("m-peak-time").textContent=d.peakPowerTime ? `Puncak ${d.peakPowerTime}` : "Belum ada";
+  $("m-balance").textContent=fmtKwh(latest.saldoAktual);
+  $("m-vi").textContent=`${Number(latest.voltage||0).toFixed(0)} V / ${Number(latest.current||0).toFixed(2)} A`;
+  $("m-frequency").textContent=`${Number(latest.frequency||0).toFixed(1)} Hz • PZEM`;
+  $("m-cost").textContent=fmtRp(d.totalKwhMonth*currentTariff);
+  $("m-month-kwh").textContent=fmtKwh(d.totalKwhMonth)+" kWh";
+  $("month-total").textContent=fmtKwh(d.totalKwhMonth)+" kWh";
+  $("month-cost").textContent=fmtRp(d.totalKwhMonth*currentTariff);
+  $("m-load").textContent=Math.round(Math.min(100,(Number(latest.power)||0)/CONFIG.POWER_LIMIT_W*100))+"% dari batas";
+  $("health-pzem").innerHTML=latest.pzemOk?'<span class="text-emerald-300">NORMAL</span>':'<span class="text-red-300">ERROR</span>';
+  applyAI(d); applyPrediction(d); applyRelay(d.relayState);
+  powerChart._smartLogs=d.logs||[];
+  powerChart.data.labels=(d.logs||[]).map(x=>x.waktu);
+  powerChart.data.datasets[0].data=(d.logs||[]).map(x=>Number(x.power)||0);
+  powerChart.data.datasets[1].data=(d.logs||[]).map(()=>CONFIG.POWER_LIMIT_W);
+  powerChart.update("none");
+  dailyChart.data.labels=(d.daily||[]).map(x=>x.tanggal);
+  dailyChart.data.datasets[0].data=(d.daily||[]).map(x=>Number(x.kwh)||0);
+  dailyChart.update("none");
+  $("summary-label").textContent=`${d.monthLabel} • ${(d.daily||[]).length} hari terdata • Tarif ${fmtRp(currentTariff)}/kWh`;
+}
+
+async function api(params={}) {
+  const u=new URL(CONFIG.GAS_URL);
+  Object.entries(params).forEach(([k,v])=>u.searchParams.set(k,v));
+  const r=await fetch(u.toString(),{cache:"no-store"});
+  if(!r.ok) throw new Error(`HTTP ${r.status}`);
+  return await r.json();
+}
+
+async function refresh() {
+  try { render(await api({action:"dashboard"})); }
+  catch(e) {
+    console.error(e);
+    setDeviceStatus(false,null);
+    $("health-gas").innerHTML='<span class="text-red-300">ERROR</span>';
+    $("health-pzem").textContent="NO DATA";
+  }
+}
+
+async function command(params, successMessage) {
+  if (busy) return;
+  busy=true;
+  try {
+    const res=await api(params);
+    if (res.status!=="success") throw new Error(res.message||"Perintah gagal");
+    alert(successMessage || "Perintah berhasil dikirim.");
+    await new Promise(r=>setTimeout(r,1000)); await refresh();
+  } catch(e) { alert("Gagal: "+e.message); }
+  finally { busy=false; }
+}
+
+$("relay-btn").onclick=async()=> {
+  if(!latestDashboard) return;
+  const target=Number(latestDashboard.relayState)===1?0:1;
+  await command({action:"relay",value:target},`Perintah relay ${target?"ON":"OFF"} dikirim.`);
+};
+$("topup-btn").onclick=async()=> {
+  const rupiah=Number($("topup-input").value);
+  if(!rupiah || rupiah<=0) return alert("Masukkan nominal top-up yang valid.");
+  await command({action:"topup",rupiah},`Top-up Rp ${rupiah.toLocaleString("id-ID")} dikirim ke ESP8266.`);
+  $("topup-input").value="";
+};
+$("reset-btn").onclick=async()=> {
+  if(!confirm("Reset saldo pada perangkat menjadi 0 kWh?")) return;
+  await command({action:"reset"},"Perintah reset saldo dikirim.");
+};
+
+$("export-btn").onclick=()=> {
+  if(!latestDashboard?.daily?.length) return alert("Belum ada data untuk diekspor.");
+  const tariff=currentTariff;
+  let csv="No,Tanggal,Konsumsi Energi (kWh),Estimasi Biaya (Rp),Tarif (Rp/kWh),Peak Power (W),Peak Time\n";
+  latestDashboard.daily.forEach((x,i)=>{
+    const kwh=Number(x.kwh)||0;
+    csv+=`${i+1},${x.tanggal},${kwh.toFixed(4)},${Math.round(kwh*tariff)},${tariff.toFixed(1)},${Number(x.peakPower||0).toFixed(1)},${x.peakTime||""}\n`;
+  });
+  const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download=`SmartWatt_${latestDashboard.monthKey}.csv`; a.click(); URL.revokeObjectURL(a.href);
+};
+
+let pollTimer=null;
+function stopPolling(){if(pollTimer){clearInterval(pollTimer);pollTimer=null;}}
+function boot(){ if(!powerChart) initCharts(); refresh(); stopPolling(); pollTimer=setInterval(refresh,CONFIG.POLL_MS); }
+
+checkSession();
+if(sessionStorage.getItem("smartWattAuth")==="1") boot();
+</script>
+</body>
+</html>
